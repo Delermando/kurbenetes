@@ -1,0 +1,110 @@
+---
+title: Kurbenetes
+tags: []
+notebook: Where's My Coffe
+---
+
+### Main componentes
+etcd -> key-value store
+Kurbenetes master -> expose kurbenetes api
+Service proxy -> provider service interface for clients on each node
+kebelet -> is a agente that ryb ib each node
+
+### Config kernel
+CONFIG_RESOURCE_COUNTERS=y
+CONFIG_MEMCG=y
+CONFIG_MEMCG_SWAP=y
+CONFIG_MEMCG_SWAP_ENABLED=y
+CONFIG_MEMCG_KMEM=y
+
+### kernel configuration file (enable swap)
+vim /boot/config-3.13.0-48-generic
+CONFIG_MEMCG_SWAP_ENABLED
+
+### grub config file (turns on swap accounting)
+su -c 'vim /etc/default/grub '
+GRUB_CMDLINE_LINUX="cgroup_enable=memory swapaccount=1"
+
+### update the grub.cfg file
+update-grub
+
+### reboot system
+reboot
+
+### start etcd container
+docker run --net=host -d gcr.io/google_containers/etcd:2.0.12 /usr/local/bin/etcd --addr=127.0.0.1:4001 --bind-addr=0.0.0.0:4001 --data-dir=/var/etcd/data
+
+
+### start kurbenetes master containerize
+## the container master is started using the "kebelet" that start the others Master componentes
+## Master componentes
+## -> API Server - that receive a request, proccess it and tham store the result in etcd if required
+## -> Scheduler - monitor the API for unsheduler pods and schedules them on a node and notifies the API about them
+## -> Controller - manages the replication level of pods, starting or downing them on eventos of scale up or scale down
+## -> Pause - keeps the port mapping of all the containers in the pod or network end point
+
+docker run --volume=/:/rootfs:ro --volume=/sys:/sys:ro --volume=/dev:/dev --volume=/var/lib/docker/:/var/lib/docke­­r:ro --volume=/var/lib/kubelet/:/vr/lib/kube­­let:rw --volume=/var/run:/var/run:rw --net=host --pid=host --privileged=true -d gcr.io/google_containers/hyperkube:v1.0.1 /hyperkube kubelet --containerized --hostname-override="127.0.0.1" --address="0.0.0.0" --api-servers=http://localhost:8080 --config=/etc/kubernetes/manifests
+
+### start service proxy container
+## is a proxy for Kurbeneter service that provider a interface to the pods using a service selector with labels
+
+docker run -d --net=host --privileged gcr.io/google_containers/hyperkube:v1.0.1 /hyperkube proxy --master=http://127.0.0.1:8080 --v=2
+
+### kurbenetes master api
+http://localhost:8080
+
+### download kubectl
+## is used to control the kurbenetes
+wget https://storage.googleapis.com/kubernetes-release/release/v1.0.1/bin/linux/amd64/kubectl
+chmod +x kubectl
+mv kubectl /usr/local/bin/
+
+### using kubectl
+
+## listing services
+kubectl get services
+
+## listing nodes
+kubectl get nodes
+
+## run a nginx thought cluster manager
+kubectl -s http://localhost:8080 run nginx --image=nginx --port=80
+
+## expose nginx replication controller
+kubectl expose rc nginx --port=80
+
+## get details about nginx service
+kubectl get svc nginx
+
+## get nginx cluster ip (this ip is used to connect at the nginx)
+kubectl get svc nginx --template={{.spec.clusterIP}}
+
+## get kurbenetes master info
+kubectl cluster-info
+
+## list replication controllers
+kubectl get rc
+
+## create a hellow world tutum
+kubectl -s http://localhost:8080 run hello-world --image=tutum/hello-world --replicas=1 --port=80
+
+## create a service 
+kubectl expose rc hello-world --port=8080 --type=LoadBalancer
+
+kubectl get services
+
+
+## Describe a pod and service
+kubectl describe pod hello-world-syrqz
+kubectl describe svc hello-world-syrqz
+
+## Scale replicatio controller
+kubectl scale rc hello-world --replicas=4
+
+## Delete a rc and svc
+kubectl delere rc hello-world
+kubectl delere svc hello-world
+
+
+## Run kurbenetes from yml
+kubectl create -f hello-world-service.yaml --validate
